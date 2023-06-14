@@ -13,6 +13,7 @@ struct MyLink *init_link()
     struct MyLink *p = (struct MyLink *)malloc(sizeof(struct MyLink));
     p->next = NULL;
     p->anchor_addr = 0;
+    p->tag_addr = 0;
     p->range[0] = 0.0;
     p->range[1] = 0.0;
     p->range[2] = 0.0;
@@ -21,12 +22,12 @@ struct MyLink *init_link()
 }
 
 // create a new {add, range[3]} and append to device
-void add_link(struct MyLink *p, uint8_t addr)
+void add_link(struct MyLink *p, uint8_t addr, uint8_t tagaddr)
 {
 #ifdef SERIAL_DEBUG
     Serial.println("add_link");
 #endif
-    struct MyLink *curr= find_link(p, addr);
+    struct MyLink *curr= find_link(p, tagaddr);
     if (curr != NULL) {
         return;
     }
@@ -41,6 +42,7 @@ void add_link(struct MyLink *p, uint8_t addr)
     //Create a anchor
     struct MyLink *a = (struct MyLink *)malloc(sizeof(struct MyLink));
     a->anchor_addr = addr;
+    a->tag_addr = tagaddr;
     a->range[0] = 0.0;
     a->range[1] = 0.0;
     a->range[2] = 0.0;
@@ -53,14 +55,14 @@ void add_link(struct MyLink *p, uint8_t addr)
 }
 
 // find link by address, iterate down link list and returns struct
-struct MyLink *find_link(struct MyLink *p, uint8_t addr)
+struct MyLink *find_link(struct MyLink *p, uint8_t tagaddr)
 {
 #ifdef SERIAL_DEBUG
     Serial.println("find_link");
 #endif
-    if (addr == 0)
+    if (tagaddr == 0)
     {
-        Serial.println("find_link:Input addr is 0");
+        Serial.println("find_link:Input tagaddr is 0");
         return NULL;
     }
 
@@ -75,26 +77,26 @@ struct MyLink *find_link(struct MyLink *p, uint8_t addr)
     while (temp->next != NULL)
     {
         temp = temp->next;
-        if (temp->anchor_addr == addr)
+        if (temp->tag_addr == tagaddr)
         {
             // Serial.println("find_link:Find addr");
             return temp;
         }
     }
 
-    Serial.println("find_link:Can't find addr");
+    Serial.println("find_link:Can't find tagaddr");
     return NULL;
 }
 
 
 // finds existing struct link of address in linkedlist
 // if exists, add new range to first position by taking average of it + past 2 range, push back the rest.
-void fresh_link(struct MyLink *p, uint8_t addr, double range)
+void fresh_link(struct MyLink *p, uint8_t tagaddr, double range)
 {
 #ifdef SERIAL_DEBUG
     Serial.println("fresh_link");
 #endif
-    struct MyLink *temp = find_link(p, addr);
+    struct MyLink *temp = find_link(p, tagaddr);
     if (temp != NULL)
     {
         temp->range[2] = temp->range[1];
@@ -120,6 +122,7 @@ void print_link(struct MyLink *p)
     {
         //Serial.println("Dev %d:%d m", temp->next->anchor_addr, temp->next->range);
         Serial.println(temp->next->anchor_addr, HEX);
+        Serial.println(temp->next->tag_addr, HEX);
         Serial.println(temp->next->range[0]);
         temp = temp->next;
     }
@@ -162,7 +165,7 @@ void make_link_json(struct MyLink *p, String *s)
     {
         temp = temp->next;
         char link_json[50];
-        sprintf(link_json, "{\"A\":\"%X\",\"R\":\"%.2f\"}", temp->anchor_addr, temp->range[0]);
+        sprintf(link_json, "{\"A\":\"%X\",\"R\":\"%.2f\",\"T\":\"%X\"}", temp->anchor_addr, temp->range[0], temp->tag_addr);
         *s += link_json;
         if (temp->next != NULL)
         {

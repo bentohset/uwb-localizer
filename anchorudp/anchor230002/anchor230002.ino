@@ -26,7 +26,7 @@
 // Wifi details
 const char *ssid = "TP-Link_3logytech";
 const char *password = "3logytech1928";
-const char *host = "192.168.0.135";   //ip address of host aka laptop for visualisation
+const char *host = "192.168.0.147";   //ip address of host aka laptop for visualisation
 WiFiClient client;
 WiFiUDP udp;
 
@@ -227,10 +227,10 @@ void loop() {
 
       /* Add link for new device detected (may or may not be used)*/
       if (UDP_ENABLED) {
-        add_link(uwb_data, convertToUint8(rx_buffer));
+        add_link(uwb_data, convertToUint8(tx_poll_msg), convertToUint8(rx_buffer));
       }
 
-      if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0) {
+      // if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0) {
         /* store address*/
         uint8_t device_address = convertToUint8(rx_buffer);
         
@@ -274,7 +274,7 @@ void loop() {
         if (UDP_ENABLED) {
           fresh_link(
             uwb_data, 
-            convertToUint8(tx_poll_msg),
+            device_address,
             distance
           );
           // if ((millis() - runtime) > 1000) {
@@ -287,7 +287,7 @@ void loop() {
         /* Display computed distance on LCD. */
         // snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
         test_run_info((unsigned char *)dist_str);
-      }
+      // }
     }
   } else {
     /* Clear RX error/timeout events in the DW IC status register. */
