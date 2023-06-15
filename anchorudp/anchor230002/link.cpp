@@ -22,7 +22,7 @@ struct MyLink *init_link()
 }
 
 // create a new {add, range[3]} and append to device
-void add_link(struct MyLink *p, uint8_t addr, uint8_t tagaddr)
+void add_link(struct MyLink *p, uint8_t addr, uint64_t tagaddr)
 {
 #ifdef SERIAL_DEBUG
     Serial.println("add_link");
@@ -55,7 +55,7 @@ void add_link(struct MyLink *p, uint8_t addr, uint8_t tagaddr)
 }
 
 // find link by address, iterate down link list and returns struct
-struct MyLink *find_link(struct MyLink *p, uint8_t tagaddr)
+struct MyLink *find_link(struct MyLink *p, uint64_t tagaddr)
 {
 #ifdef SERIAL_DEBUG
     Serial.println("find_link");
@@ -91,7 +91,7 @@ struct MyLink *find_link(struct MyLink *p, uint8_t tagaddr)
 
 // finds existing struct link of address in linkedlist
 // if exists, add new range to first position by taking average of it + past 2 range, push back the rest.
-void fresh_link(struct MyLink *p, uint8_t tagaddr, double range)
+void fresh_link(struct MyLink *p, uint64_t tagaddr, double range)
 {
 #ifdef SERIAL_DEBUG
     Serial.println("fresh_link");
@@ -158,6 +158,7 @@ void make_link_json(struct MyLink *p, String *s)
 #ifdef SERIAL_DEBUG
     Serial.println("make_link_json");
 #endif
+    
     *s = "{\"links\":";
     struct MyLink *temp = p;
 
@@ -165,7 +166,7 @@ void make_link_json(struct MyLink *p, String *s)
     {
         temp = temp->next;
         char link_json[50];
-        sprintf(link_json, "{\"A\":\"%X\",\"R\":\"%.2f\",\"T\":\"%X\"}", temp->anchor_addr, temp->range[0], temp->tag_addr);
+        sprintf(link_json, "{\"A\":\"%X\",\"R\":\"%.2f\",\"T\":\"%016llX\"}", temp->anchor_addr, temp->range[0], temp->tag_addr);
         *s += link_json;
         if (temp->next != NULL)
         {

@@ -2,7 +2,7 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include "link.h"
-
+// TODO: test lower RNG_DELAY_MS to decrease latency (changed from 1000->500)
 #define UDP_ENABLED true
 
 #define APP_NAME "SS TWR INIT v1.0"
@@ -10,10 +10,10 @@
 #define PIN_IRQ 34
 #define PIN_SS 4
 
-// increase delay, lower total distance after calc
-#define RNG_DELAY_MS 1000
-#define TX_ANT_DLY 16375
-#define RX_ANT_DLY 16375
+// increase Adelay, lower total distance after calc
+#define RNG_DELAY_MS 200
+#define TX_ANT_DLY 16370
+#define RX_ANT_DLY 16370
 #define ALL_MSG_COMMON_LEN 10
 #define ALL_MSG_SN_IDX 2
 #define RESP_MSG_POLL_RX_TS_IDX 10
@@ -26,11 +26,11 @@
 // Wifi details
 const char *ssid = "TP-Link_3logytech";
 const char *password = "3logytech1928";
-const char *host = "192.168.0.147";   //ip address of host aka laptop for visualisation
+const char *host = "192.168.0.173";   //ip address of host aka laptop for visualisation
 WiFiClient client;
 WiFiUDP udp;
 
-const int numReadings = 4;
+const int numReadings = 5;
 
 // filters for filtering distance
 double readings[numReadings];
@@ -64,6 +64,7 @@ static dwt_config_t config = {
 // message for handshake ACK
 static uint8_t tx_poll_msg[] = {0x42, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0}; //id of anchor2
 static uint8_t rx_resp_msg[] = {0x42, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+//42-88-0-CA-DE-56-45-57-41-E1-[TOF Vals]
 // waiting to receive from VEWA - id of tag
 
 #define RX_BUF_LEN 20
@@ -164,6 +165,16 @@ uint8_t convertToUint8(uint8_t* ptr) {
   return *ptr;
 }
 
+uint64_t convertToUint64(uint8_t* ptr) {
+  uint64_t val;
+  // memcpy(&val, ptr, sizeof(uint64_t));
+  for (int i = 0; i < 8; i++) {
+    val |= static_cast<uint64_t>(ptr[i]) << (8 * (7 - i));
+  }
+  return val;
+
+}
+
 void setup() {
   UART_init();
   UART_puts("TAG SETUP\r\n");
@@ -222,17 +233,24 @@ void loop() {
       /* Check that the frame is the expected response from the companion "SS TWR responder" example.
        * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
       rx_buffer[ALL_MSG_SN_IDX] = 0;
-      // for (int i = 0; i < sizeof(rx_buffer)/sizeof(rx_buffer[0]); i++) Serial.print(rx_buffer[i], HEX);
-      // Serial.println();
+      Serial.print("TAGID: ");
+      // first 9 digits of RXBUFFER, rest is tof data
+      for (int i = 0; i < 10; i++) {
+        Serial.print(rx_buffer[i], HEX);
+        if (i < 9) {
+          Serial.print(":");
+        }
+      }
+      Serial.println();
 
       /* Add link for new device detected (may or may not be used)*/
       if (UDP_ENABLED) {
-        add_link(uwb_data, convertToUint8(tx_poll_msg), convertToUint8(rx_buffer));
+        add_link(uwb_data, convertToUint8(tx_poll_msg), convertToUint64(rx_buffer));
       }
 
       // if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0) {
         /* store address*/
-        uint8_t device_address = convertToUint8(rx_buffer);
+        uint64_t device_address = convertToUint64(rx_buffer);
         
         // Serial.println("compare correct");
         uint32_t poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
@@ -270,7 +288,7 @@ void loop() {
         distance = average;
         Serial.print("Anchor 2");
         Serial.print(" Distance: ");
-        Serial.print(distance);
+        Serial.println(distance);
         if (UDP_ENABLED) {
           fresh_link(
             uwb_data, 
