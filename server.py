@@ -1,3 +1,5 @@
+# Receives N number of tags via UDP datagram (connectionless)
+
 import time
 import socket
 import json
@@ -5,11 +7,15 @@ import pygame
 from localization import trilateration
 from tests import Test
 
-TESTING = True
+TESTING = False
+
+# TODO: 
+# explore apple device
+# check if DW1000 compatibe
 
 ######Calibration/Structure Setup########
-anchor1_pos = [200, 0]
-anchor2_pos = [400, 0]
+anchor1_pos = [500, 0]
+anchor2_pos = [900, 0]
 anchor1_id = "41"
 anchor2_id = "42"
 anchor_dist = 0.8
@@ -25,16 +31,16 @@ blue = (0, 0, 255)
 grey = (110,110,110)
 black = (0,0,0)
 yellow = (255, 255, 0)
-window_width = 600
-window_height = 800
+window_width = 1400
+window_height = 900
 
 # creates pygame instance and font for text
 def init_game():
     pygame.init()
-    window = pygame.display.set_mode((window_width, window_height))
+    window = pygame.display.set_mode((window_width, window_height), pygame.RESIZABLE)
     clock = pygame.time.Clock()
     pygame.font.init()
-    my_font = pygame.font.SysFont('Comic Sans MS', 16)
+    my_font = pygame.font.SysFont('Arial', 28)
     return window, clock, my_font
 
 # creates socket: UDP datagram
@@ -70,6 +76,17 @@ def read_data(sock):
 
     return uwb_list
 
+
+# insert ':' between every 2 digits to show on display as MAC address
+def convert_to_mac(val):
+    res = ''
+    for idx in range(0,len(val)):
+        res += val[idx]
+        if idx % 2 == 1 and idx != 0 and idx != len(val)-1:
+            res += ':'
+
+    return res
+
 # scales the distances in meters to pixels according to screen dimensions
 def scale_to_pixel(pos):
     #convert to pixel
@@ -82,9 +99,11 @@ def render_data(screen, font, tags_pos):
     # Render the positions of the anchors statically
     text_surface1 = font.render('Anchor 1/ Gantry', False, white, black)
     text_surface2 = font.render('Anchor 2/ Gantry', False, white, black)
-    pygame.draw.circle(screen, white, anchor1_pos, 10)  # Red anchor
-    pygame.draw.circle(screen, white, anchor2_pos, 10)  # Green anchor
-    screen.blit(text_surface1, (anchor1_pos[0]-150, anchor1_pos[1]+10))
+    pygame.draw.circle(screen, white, anchor1_pos, 14)  # Red anchor
+    pygame.draw.circle(screen, white, anchor2_pos, 14)  # Green anchor
+    pygame.draw.line(screen, yellow, anchor1_pos, (500,900))
+    pygame.draw.line(screen, yellow, anchor2_pos, (900,900))
+    screen.blit(text_surface1, (anchor1_pos[0]-200, anchor1_pos[1]+10))
     screen.blit(text_surface2, (anchor2_pos[0]+40, anchor1_pos[1]+10))
     print("tagss")
     print(tags_pos)
@@ -94,10 +113,20 @@ def render_data(screen, font, tags_pos):
     for i in range(0, len(tags_pos)):
         tag_id = tags_pos[i]["tagID"]
         tagpos = tags_pos[i]["tagpos"]
-        text_surface3 = font.render('Tag '+str(tag_id), False, blue, black)
+        tagdist = tags_pos[i]["tagDist"]
+        text_surface3 = font.render('TagID: '+convert_to_mac(str(tag_id)), False, white, black)
+        text_dist1 = font.render(str(tagdist[0]) + 'm', False, white, black)
+        text_dist2 = font.render(str(tagdist[1]) + 'm', False, white, black)
+        line1_ctr = ((tagpos[0] + anchor1_pos[0])//2 - 80, (tagpos[1] + anchor1_pos[1])//2)
+        line2_ctr = ((tagpos[0] + anchor2_pos[0])//2 + 40, (tagpos[1] + anchor2_pos[1])//2)
         
+        pygame.draw.line(screen, white, tagpos, anchor1_pos)
+        pygame.draw.line(screen, white, tagpos, anchor2_pos)
         screen.blit(text_surface3, (tagpos[0]+20, tagpos[1]))
-        pygame.draw.circle(screen, blue, tagpos, 10)
+        screen.blit(text_dist1, line1_ctr)
+        screen.blit(text_dist2, line2_ctr)
+        
+        pygame.draw.circle(screen, green, tagpos, 14)
 
     pygame.display.flip()
 
@@ -126,7 +155,7 @@ def main():
     if TESTING:
         test = Test()
     screen, clock, font = init_game()
-    print("game init")
+    print("game initialized, waiting to receive")
     a1_range = 0.00
     a2_range = 0.00
     running = True
@@ -141,10 +170,11 @@ def main():
             list = read_data(sock)
         else:
             print("testing")
-            list = test.generate_test_rand()
+            list = test.generate_test_rand_two()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                print("Exit")
                 running = False
                 pygame.quit()
 
@@ -187,6 +217,7 @@ def main():
 
                 new_object = {
                     "tagpos": (positive_tag_pos[0], positive_tag_pos[1]),
+                    "tagDist": (data_struct[i]["A1"], data_struct[i]["A2"]),
                     "tagID": data_struct[i]["tagID"]
                 }
                 # print("newobj", new_object)

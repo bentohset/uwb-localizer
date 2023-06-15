@@ -1,3 +1,5 @@
+# Receives only 1 Tag, establishes a connection before sending data
+
 import time
 import cmath
 import socket
