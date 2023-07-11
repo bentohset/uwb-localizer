@@ -3,7 +3,7 @@
 #include <WiFiUdp.h>
 #include "link.h"
 // TODO: test lower RNG_DELAY_MS to decrease latency (changed from 1000->500)
-#define UDP_ENABLED true
+#define UDP_ENABLED false
 
 #define APP_NAME "SS TWR INIT v1.0"
 #define PIN_RST 27
@@ -26,7 +26,7 @@
 // Wifi details
 const char *ssid = "TP-Link_3logytech";
 const char *password = "3logytech1928";
-const char *host = "192.168.0.168";   //ip address of host aka laptop for visualisation
+const char *host = "192.168.0.173";   //ip address of host aka laptop for visualisation
 WiFiClient client;
 WiFiUDP udp;
 
@@ -191,7 +191,7 @@ void setup() {
 
 void loop() {
   /* Write frame data to DW IC and prepare transmission. See NOTE 7 below. */
-  // UART_puts("looping");
+  UART_puts("looping");
   // Serial.println(anchorNum);
 
   // Handshake, transmit and polls for 2 uwb devices which acts as the anchors

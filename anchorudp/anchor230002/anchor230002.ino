@@ -26,7 +26,7 @@
 // Wifi details
 const char *ssid = "TP-Link_3logytech";
 const char *password = "3logytech1928";
-const char *host = "192.168.0.173";   //ip address of host aka laptop for visualisation
+const char *host = "192.168.0.168";   //ip address of host aka laptop for visualisation
 WiFiClient client;
 WiFiUDP udp;
 

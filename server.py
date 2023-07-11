@@ -9,10 +9,6 @@ from tests import Test
 
 TESTING = False
 
-# TODO: 
-# explore apple device
-# check if DW1000 compatibe
-
 ######Calibration/Structure Setup########
 anchor1_pos = [500, 0]
 anchor2_pos = [900, 0]
@@ -170,7 +166,7 @@ def main():
             list = read_data(sock)
         else:
             print("testing")
-            list = test.generate_test_rand_two()
+            list = test.generate_test_rand()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -185,7 +181,7 @@ def main():
 
         # array of objects [{T: 42, A1: 0.4, A2: 0.5, count: 1}, {T: 42, A1: 0.4, A2: 0.3, count: 2}]
         # find index of ds with T == tag_id
-        indx =  find_obj_index(data_struct, tag_id) 
+        indx =  find_obj_index(data_struct, tag_id)  # gets the index of the object within the array corresponding to the tagID
         if (indx == -1):
             data_struct.append({
                 "tagID": tag_id,
