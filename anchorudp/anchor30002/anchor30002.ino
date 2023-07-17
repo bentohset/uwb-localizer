@@ -2,7 +2,8 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include "link.h"
-// TODO: test lower RNG_DELAY_MS to decrease latency (changed from 1000->500)
+
+// to enable communication with server
 #define UDP_ENABLED true
 
 #define APP_NAME "SS TWR INIT v1.0"
@@ -93,16 +94,6 @@ void setupWifi() {
   Serial.print("IP Address:");
   Serial.println(WiFi.localIP());
   udp.begin(1234);
-
-  // if (client.connect(host, 80)) {
-  //   Serial.println("Success");
-  //   client.print(
-  //     String("GET /") + " HTTP/1.1\r\n" +
-  //     "Host: " + host + "\r\n" +
-  //     "Connection: close\r\n" +
-  //     "\r\n"
-  //   );
-  // }
 }
 
 void setupUWB() {
@@ -157,7 +148,7 @@ void setupUDP() {
 
 void send_udp(String *msg_json) {
   udp.beginPacket(host, 80);
-  // Serial.println(msg_json);
+
   udp.write(reinterpret_cast<const uint8_t*>(msg_json->c_str()), msg_json->length());
   udp.endPacket();
   Serial.println("UDP send");
@@ -169,7 +160,7 @@ uint8_t convertToUint8(uint8_t* ptr) {
 
 uint64_t convertToUint64(uint8_t* ptr) {
   uint64_t val;
-  // memcpy(&val, ptr, sizeof(uint64_t));
+
   for (int i = 0; i < 8; i++) {
     val |= static_cast<uint64_t>(ptr[i]) << (8 * (7 - i));
   }
@@ -190,7 +181,7 @@ void setup() {
 }
 
 void loop() {
-  /* Write frame data to DW IC and prepare transmission. See NOTE 7 below. */
+  /* Write frame data to DW IC and prepare transmission. */
   // UART_puts("looping");
   // Serial.println(anchorNum);
 
@@ -204,36 +195,26 @@ void loop() {
   /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
    * set by dwt_setrxaftertxdelay() has elapsed. */
   dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
-  // Serial.println(SYS_STATUS_ID);
-  // Serial.println(dwt_read32bitreg(SYS_STATUS_ID));
-  // Serial.println((SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR));
 
   /* We assume that the transmission is achieved correctly, poll for reception of a frame or error/timeout. See NOTE 8 below. */
   while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR))){ };
-  // Serial.println("frame received");
 
   /* Increment frame sequence number after transmission of the poll message (modulo 256). */
   frame_seq_nb++;
-  // Serial.println(status_reg);
-  // Serial.println(SYS_STATUS_RXFCG_BIT_MASK);
 
   if (status_reg & SYS_STATUS_RXFCG_BIT_MASK) {
     uint32_t frame_len;
 
     /* Clear good RX frame event in the DW IC status register. */
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
-    // Serial.println("clear frame event");
 
     /* A frame has been received, read it into the local buffer. */
     frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFLEN_MASK;
-    // Serial.println("frame read into local buffer");
-    // Serial.println(frame_len);
-    // Serial.println(sizeof(rx_buffer));
 
     if (frame_len <= sizeof(rx_buffer)) {
       dwt_readrxdata(rx_buffer, frame_len, 0);
 
-      /* Check that the frame is the expected response from the companion "SS TWR responder" example.
+      /* Check that the frame is the expected response.
        * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
       rx_buffer[ALL_MSG_SN_IDX] = 0;
       Serial.print("TAGID: ");
@@ -251,65 +232,60 @@ void loop() {
         add_link(uwb_data, convertToUint8(tx_poll_msg), convertToUint64(rx_buffer));
       }
 
-      // if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0) {
-        /* store address*/
-        uint64_t device_address = convertToUint64(rx_buffer);
+      /* store address*/
+      uint64_t device_address = convertToUint64(rx_buffer);
+      
+
+      uint32_t poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
+      int32_t rtd_init, rtd_resp;
+      float clockOffsetRatio;
+
+      /* Retrieve poll transmission and response reception timestamps. See NOTE 9 below. */
+      poll_tx_ts = dwt_readtxtimestamplo32();
+      resp_rx_ts = dwt_readrxtimestamplo32();
+
+      /* Read carrier integrator value and calculate clock offset ratio. See NOTE 11 below. */
+      clockOffsetRatio = ((float)dwt_readclockoffset()) / (uint32_t)(1 << 26);
+
+      /* Get timestamps embedded in response message. */
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
+
+      /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
+      rtd_init = resp_rx_ts - poll_tx_ts;
+      rtd_resp = resp_tx_ts - poll_rx_ts;
+
+      tof = ((rtd_init - rtd_resp * (1 - clockOffsetRatio)) / 2.0) * DWT_TIME_UNITS;
+      distance = tof * SPEED_OF_LIGHT;
+
+      Serial.println(distance);
+
+      // samples the readings for accuracy
+      total = total - readings[readIndex];
+      readings[readIndex] = distance;
+      total = total + readings[readIndex];
+      readIndex = readIndex + 1;
+      if (readIndex >= numReadings) {
+        readIndex = 0;
+      }
+      average = total / numReadings;
+      distance = average;
+      Serial.print("Anchor 1");
+      Serial.print(" Distance: ");
+      Serial.println(distance);
+
+      if (UDP_ENABLED) {
+        fresh_link(
+          uwb_data, 
+          device_address,
+          distance
+        );
+        make_link_json(uwb_data, &all_json);
+        send_udp(&all_json);
         
-        // Serial.println("compare correct");
-        uint32_t poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
-        int32_t rtd_init, rtd_resp;
-        float clockOffsetRatio;
-
-        /* Retrieve poll transmission and response reception timestamps. See NOTE 9 below. */
-        poll_tx_ts = dwt_readtxtimestamplo32();
-        resp_rx_ts = dwt_readrxtimestamplo32();
-
-        /* Read carrier integrator value and calculate clock offset ratio. See NOTE 11 below. */
-        clockOffsetRatio = ((float)dwt_readclockoffset()) / (uint32_t)(1 << 26);
-
-        /* Get timestamps embedded in response message. */
-        resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
-        resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
-
-        /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
-        rtd_init = resp_rx_ts - poll_tx_ts;
-        rtd_resp = resp_tx_ts - poll_rx_ts;
-
-        tof = ((rtd_init - rtd_resp * (1 - clockOffsetRatio)) / 2.0) * DWT_TIME_UNITS;
-        distance = tof * SPEED_OF_LIGHT;
-
-        Serial.println(distance);
-
-        total = total - readings[readIndex];
-        readings[readIndex] = distance;
-        total = total + readings[readIndex];
-        readIndex = readIndex + 1;
-        if (readIndex >= numReadings) {
-          readIndex = 0;
-        }
-        average = total / numReadings;
-        distance = average;
-        Serial.print("Anchor 1");
-        Serial.print(" Distance: ");
-        Serial.println(distance);
-
-        if (UDP_ENABLED) {
-          fresh_link(
-            uwb_data, 
-            device_address,
-            distance
-          );
-          // if ((millis() - runtime) > 1000) {
-            make_link_json(uwb_data, &all_json);
-            send_udp(&all_json);
-          //   runtime = millis();
-          // }
-          
-        }
-        /* Display computed distance on LCD. */
-        // snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
-        test_run_info((unsigned char *)dist_str);
-      // }
+      }
+      /* Display computed distance on LCD. */
+      test_run_info((unsigned char *)dist_str);
     }
   } else {
     /* Clear RX error/timeout events in the DW IC status register. */

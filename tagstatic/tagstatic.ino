@@ -39,11 +39,12 @@ static dwt_config_t config = {
 #define TX_ANT_DLY 16385
 #define RX_ANT_DLY 16385
  
-/* Frames used in the ranging process. See NOTE 3 below. */
+/* Frames used in the ranging process.*/
 static uint8_t rx_poll_msg1[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'S', 'I', 'J', 'A', 0xE0, 0, 0};  //id of anchor1
 static uint8_t rx_poll_msg2[] = {0x42, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};  //if of anchor2
 static uint8_t tx_resp_msg[] = {0x42, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; //tag id
-/* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
+
+/* Length of the common part of the message (up to and including the function code). */
 #define ALL_MSG_COMMON_LEN 10
 /* Index to access some of the fields in the frames involved in the process. */
 #define ALL_MSG_SN_IDX 2
@@ -54,8 +55,8 @@ static uint8_t tx_resp_msg[] = {0x42, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0
 static uint8_t frame_seq_nb = 0;
  
 /* Buffer to store received messages.
-   Its size is adjusted to longest frame that this example code is supposed to handle. */
-#define RX_BUF_LEN 12//Must be less than FRAME_LEN_MAX_EX
+  Its size is adjusted to longest frame that this example code is supposed to handle. */
+#define RX_BUF_LEN 12 //Must be less than FRAME_LEN_MAX_EX
 static uint8_t rx_buffer[RX_BUF_LEN];
  
 /* Hold copy of status register state here for reference so that it can be examined at a debug breakpoint. */
@@ -94,14 +95,12 @@ void setup() {
  
   delay(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
  
-  while (!dwt_checkidlerc()) // Need to make sure DW IC is in IDLE_RC before proceeding
-  {
+  while (!dwt_checkidlerc()) { // Need to make sure DW IC is in IDLE_RC before proceeding
     UART_puts("IDLE FAILED\r\n");
     while (1) ;
   }
  
-  if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR)
-  {
+  if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
     UART_puts("INIT FAILED\r\n");
     while (1) ;
   }
@@ -110,8 +109,7 @@ void setup() {
   dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);
  
   /* Configure DW IC. See NOTE 6 below. */
-  if (dwt_configure(&config)) // if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device
-  {
+  if (dwt_configure(&config)) { // if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device
     UART_puts("CONFIG FAILED\r\n");
     while (1) ;
   }
@@ -134,12 +132,11 @@ void loop() {
   /* Activate reception immediately. */
   dwt_rxenable(DWT_START_RX_IMMEDIATE);
  
-  /* Poll for reception of a frame or error/timeout. See NOTE 6 below. */
+  /* Poll for reception of a frame or error/timeout. */
   while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR)))
   { };
  
-  if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
-  {
+  if (status_reg & SYS_STATUS_RXFCG_BIT_MASK) {
     Serial.println("received frame");
     uint32_t frame_len;
  
@@ -148,8 +145,7 @@ void loop() {
  
     /* A frame has been received, read it into the local buffer. */
     frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFLEN_MASK;
-    if (frame_len <= sizeof(rx_buffer))
-    {
+    if (frame_len <= sizeof(rx_buffer)) {
       dwt_readrxdata(rx_buffer, frame_len, 0);
  
       /* Check that the frame is a poll sent by "SS TWR initiator" example.
@@ -157,8 +153,9 @@ void loop() {
       rx_buffer[ALL_MSG_SN_IDX] = 0;
       for (int i = 0; i < sizeof(rx_buffer)/sizeof(rx_buffer[0]); i++) Serial.print(rx_buffer[i], HEX);
       Serial.println();
-      if ((memcmp(rx_buffer, rx_poll_msg1, ALL_MSG_COMMON_LEN) == 0) || (memcmp(rx_buffer, rx_poll_msg2, ALL_MSG_COMMON_LEN) == 0))
-      {
+
+      // compares with both known anchors to check if correct message received from them
+      if ((memcmp(rx_buffer, rx_poll_msg1, ALL_MSG_COMMON_LEN) == 0) || (memcmp(rx_buffer, rx_poll_msg2, ALL_MSG_COMMON_LEN) == 0)) {
         Serial.println("message compared correct");
         uint32_t resp_tx_time;
         int ret;
@@ -184,8 +181,7 @@ void loop() {
         ret = dwt_starttx(DWT_START_TX_DELAYED);
  
         /* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. See NOTE 10 below. */
-        if (ret == DWT_SUCCESS)
-        {
+        if (ret == DWT_SUCCESS) {
           /* Poll DW IC until TX frame sent event set. See NOTE 6 below. */
           while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK))
           { };
@@ -198,9 +194,7 @@ void loop() {
         }
       }
     }
-  }
-  else
-  {
+  } else {
     /* Clear RX error events in the DW IC status register. */
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
   }

@@ -7,6 +7,7 @@ import pygame
 from localization import trilateration
 from tests import Test
 
+# toggle to use tests generated from imported tests.py
 TESTING = False
 
 ######Calibration/Structure Setup########
@@ -58,17 +59,12 @@ def init_udp():
 def read_data(sock):
     uwb_list = {}
     data, addr = sock.recvfrom(1024)
-    # print(addr)
-    # print(data)
+
     line = data.decode()
 
-    # print(line)
     uwb_data = json.loads(line)
 
     uwb_list = uwb_data["links"]
-
-    print(uwb_list)
-    print("")
 
     return uwb_list
 
@@ -87,7 +83,6 @@ def convert_to_mac(val):
 def scale_to_pixel(pos):
     #convert to pixel
     return (pos * pixel_scale)
-    return (pos[0] * pixel_scale, pos[1] * pixel_scale)
 
 # renders data on the pygame screen
 def render_data(screen, font, tags_pos):
@@ -104,7 +99,7 @@ def render_data(screen, font, tags_pos):
     print("tagss")
     print(tags_pos)
 
-    # tags_pos -> array of objects wrt each tag and coordinate
+    # tags_pos = array of objects wrt each tag and coordinate
     # renders each tag by looping thru array
     for i in range(0, len(tags_pos)):
         tag_id = tags_pos[i]["tagID"]
@@ -204,24 +199,30 @@ def main():
             data_struct[indx]["A2"] = a2_range
             data_struct[indx]["count2"] = 1
         
-        # print("before adding", data_struct)
+        # runs through the data structure. 
+        # if both tags have readings existing (signalled by count1 and count2), calculate coordinates and create object
+        # appends the object in tags_pos
         for i in range(0, len(data_struct)):
             if data_struct[i]["count1"] == 1 and data_struct[i]["count2"] == 1:
-                # print("data", data_struct)
+
                 tag_pos = trilateration(scale_to_pixel(data_struct[i]["A1"]), scale_to_pixel(data_struct[i]["A2"]), anchor1_pos, anchor2_pos)
-                positive_tag_pos = [subarr for subarr in tag_pos if all(element >= 0 for element in subarr)][0]
+                
+                # ensures that tag positions are positive. intersection of range radius may result in 2 positions positive and negative, take the positive always
+                positive_tag_pos = [subarr for subarr in tag_pos if all(element >= 0 for element in subarr)][0]     
 
                 new_object = {
                     "tagpos": (positive_tag_pos[0], positive_tag_pos[1]),
                     "tagDist": (data_struct[i]["A1"], data_struct[i]["A2"]),
                     "tagID": data_struct[i]["tagID"]
                 }
-                # print("newobj", new_object)
+
                 check_and_update(tags_pos, tag_id, new_object)
-                # print("tags_pos", tags_pos)
+
+                # reset count (wait for next readings)
                 data_struct[i]["count1"] = 0
                 data_struct[i]["count2"] = 0
 
+        # renders coordinates of the tag(s)
         render_data(screen, font, tags_pos)
         
         time.sleep(0.05)
