@@ -1,14 +1,19 @@
 # Receives N number of tags via UDP datagram (connectionless)
 
+"""
+TODO: Animate gantry opening and closing when going near
+"""
+
 import time
 import socket
 import json
 import pygame
 from localization import trilateration
 from tests import Test
+from utils import convert_to_mac, wrapText
 
 # toggle to use tests generated from imported tests.py
-TESTING = False
+TESTING = True
 
 ######Calibration/Structure Setup########
 anchor1_pos = [500, 0]
@@ -54,30 +59,23 @@ def init_udp():
 
 
 # gets data from connectionless socket, identifies device id and creates object
-# receives in format: {"links":{"A":"41","R":"0.17", "T": "42"}}
-# return in format: {"A":"41","R":"0.17", "T": "42"}
+# receives in format: {"links":{"A":"41","R":"0.17", "T": "42", "Payload":"JDOSA212..."}}
+# return in format: {"A":"41 or 42","R":"0.17", "T": "42", "Payload":"JJASD..."}
+# each link represents a tag
 def read_data(sock):
     uwb_list = {}
     data, addr = sock.recvfrom(1024)
 
     line = data.decode()
 
+    print(line)
+    json_string = b'{"links":{"A":"42","R":"-2750.36","T":"428800CADE564557","Payload":"002DCF462904B478D868A7FF3F2BF1FCD97A96092CA5577464C4AF1528A4E957DB5E20FB38A84EA6149325562444DF598D437BBE9016899D7E77C62F269888F5B430D4349D3A0D0FBD2FA1F70FD968F4D93CA835E58F2ACDC240C1CF52716A722923B05B"}}'
+
     uwb_data = json.loads(line)
 
     uwb_list = uwb_data["links"]
 
     return uwb_list
-
-
-# insert ':' between every 2 digits to show on display as MAC address
-def convert_to_mac(val):
-    res = ''
-    for idx in range(0,len(val)):
-        res += val[idx]
-        if idx % 2 == 1 and idx != 0 and idx != len(val)-1:
-            res += ':'
-
-    return res
 
 # scales the distances in meters to pixels according to screen dimensions
 def scale_to_pixel(pos):
@@ -98,24 +96,37 @@ def render_data(screen, font, tags_pos):
     screen.blit(text_surface2, (anchor2_pos[0]+40, anchor1_pos[1]+10))
     print("tagss")
     print(tags_pos)
-
     # tags_pos = array of objects wrt each tag and coordinate
     # renders each tag by looping thru array
     for i in range(0, len(tags_pos)):
         tag_id = tags_pos[i]["tagID"]
+
         tagpos = tags_pos[i]["tagpos"]
         tagdist = tags_pos[i]["tagDist"]
+        payload = tags_pos[i]["payload"]
         text_surface3 = font.render('TagID: '+convert_to_mac(str(tag_id)), False, white, black)
         text_dist1 = font.render(str(tagdist[0]) + 'm', False, white, black)
         text_dist2 = font.render(str(tagdist[1]) + 'm', False, white, black)
         line1_ctr = ((tagpos[0] + anchor1_pos[0])//2 - 80, (tagpos[1] + anchor1_pos[1])//2)
         line2_ctr = ((tagpos[0] + anchor2_pos[0])//2 + 40, (tagpos[1] + anchor2_pos[1])//2)
         
+        # if tagpos[1] < 100 and TESTING:
+        # extra = drawText(screen, text_payload_str, white, text_payload_box, font, 0, None)
+        # if extra:
+        #     print(extra)
+        """Render different tag_id payload on different lines
+        When tag_id not in tags_pos, dont render/remove render
+        """
+        if tagpos[1] < 100:
+            text_payload_str = convert_to_mac(str(tag_id))+" payload: "+str(payload)
+            wrapText(text_payload_str, 5,800, white, 1390, font, screen)
+        
         pygame.draw.line(screen, white, tagpos, anchor1_pos)
         pygame.draw.line(screen, white, tagpos, anchor2_pos)
         screen.blit(text_surface3, (tagpos[0]+20, tagpos[1]))
         screen.blit(text_dist1, line1_ctr)
         screen.blit(text_dist2, line2_ctr)
+        # screen.blit(text_payload, (5,850))
         
         pygame.draw.circle(screen, green, tagpos, 14)
 
@@ -130,7 +141,7 @@ def find_obj_index(ds, target):
     return -1
 
 # checks if the object corresponding to the tag_id is in the array
-# updates it if exists, else appends
+# updates it if exists, else appends the object to the array in place
 def check_and_update(array, tag_id, new_object):
     print(array)
     for i, obj in enumerate(array):
@@ -161,7 +172,7 @@ def main():
             list = read_data(sock)
         else:
             print("testing")
-            list = test.generate_test_rand()
+            list = test.generate_test_approaching_one()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -169,19 +180,21 @@ def main():
                 running = False
                 pygame.quit()
 
-        # {"A":"41","R":"0.17", "T": "42"}
+        # {"A":"41","R":"0.17", "T": "42", "Payload":"HSIODH2813..."}
         if not list:
             continue
         tag_id = list["T"]
 
-        # array of objects [{T: 42, A1: 0.4, A2: 0.5, count: 1}, {T: 42, A1: 0.4, A2: 0.3, count: 2}]
+        # array of objects [{T: 42, A1: 0.4, A2: 0.5, payload:fadsgdsd...., count: 1}, {T: 42, A1: 0.4, A2: 0.3, payload:asdafsa, count: 2}]
         # find index of ds with T == tag_id
         indx =  find_obj_index(data_struct, tag_id)  # gets the index of the object within the array corresponding to the tagID
+        # if not found, create a new instance
         if (indx == -1):
             data_struct.append({
                 "tagID": tag_id,
                 "A1": 0,
                 "A2": 0,
+                "payload": "",
                 "count1": 0,
                 "count2": 0
             })
@@ -192,11 +205,13 @@ def main():
         if list["A"] == anchor1_id:
             a1_range = float(list["R"])
             data_struct[indx]["A1"] = a1_range
+            data_struct[indx]["payload"] = str(list["Payload"])
             data_struct[indx]["count1"] = 1
 
         elif list["A"] == anchor2_id:
             a2_range = float(list["R"])
             data_struct[indx]["A2"] = a2_range
+            data_struct[indx]["payload"] = str(list["Payload"])
             data_struct[indx]["count2"] = 1
         
         # runs through the data structure. 
@@ -213,7 +228,8 @@ def main():
                 new_object = {
                     "tagpos": (positive_tag_pos[0], positive_tag_pos[1]),
                     "tagDist": (data_struct[i]["A1"], data_struct[i]["A2"]),
-                    "tagID": data_struct[i]["tagID"]
+                    "tagID": data_struct[i]["tagID"],
+                    "payload": data_struct[i]["payload"],
                 }
 
                 check_and_update(tags_pos, tag_id, new_object)
@@ -225,7 +241,11 @@ def main():
         # renders coordinates of the tag(s)
         render_data(screen, font, tags_pos)
         
-        time.sleep(0.05)
+        if TESTING:
+            time.sleep(0.5)
+        else:
+            time.sleep(0.05)
+
         print("")
 
     

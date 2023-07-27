@@ -1,6 +1,6 @@
 #include "link.h"
 
-// #define SERIAL_DEBUG
+#define SERIAL_DEBUG
 
 // one link list init for program in setup
 // link list of devices of [add, range[3]]
@@ -14,6 +14,9 @@ struct MyLink *init_link()
     p->next = NULL;
     p->anchor_addr = 0;
     p->tag_addr = 0;
+    for (int i = 0; i < 100; i++) {
+        p->payload[i] = 0; // Initialize each element to 0
+    }
     p->range[0] = 0.0;
     p->range[1] = 0.0;
     p->range[2] = 0.0;
@@ -22,13 +25,15 @@ struct MyLink *init_link()
 }
 
 // create a new {add, range[3]} and append to device
-void add_link(struct MyLink *p, uint8_t addr, uint64_t tagaddr)
+void add_link(struct MyLink *p, uint8_t addr, uint64_t tagaddr, uint8_t* payload)
 {
 #ifdef SERIAL_DEBUG
     Serial.println("add_link");
 #endif
     struct MyLink *curr= find_link(p, tagaddr);
     if (curr != NULL) {
+      Serial.println("link already exists!");
+      Serial.println(curr->payload[1], HEX);
         return;
     }
     struct MyLink *temp = p;
@@ -43,6 +48,9 @@ void add_link(struct MyLink *p, uint8_t addr, uint64_t tagaddr)
     struct MyLink *a = (struct MyLink *)malloc(sizeof(struct MyLink));
     a->anchor_addr = addr;
     a->tag_addr = tagaddr;
+    memcpy(a->payload, payload, 100);
+    Serial.println("test");
+    Serial.println(a->payload[0], HEX);
     a->range[0] = 0.0;
     a->range[1] = 0.0;
     a->range[2] = 0.0;
@@ -124,6 +132,10 @@ void print_link(struct MyLink *p)
         Serial.println(temp->next->anchor_addr, HEX);
         Serial.println(temp->next->tag_addr, HEX);
         Serial.println(temp->next->range[0]);
+        for (int i = 0; i < 100; i++) {
+          Serial.print(temp->next->payload[i]);
+        }
+        Serial.println();
         temp = temp->next;
     }
 
@@ -165,8 +177,19 @@ void make_link_json(struct MyLink *p, String *s)
     while (temp->next != NULL)
     {
         temp = temp->next;
-        char link_json[50];
-        sprintf(link_json, "{\"A\":\"%X\",\"R\":\"%.2f\",\"T\":\"%016llX\"}", temp->anchor_addr, temp->range[0], temp->tag_addr);
+        char link_json[200];
+        String str;
+        char buff[3];
+        for (int i = 0; i < 100; i++) {
+          sprintf(buff, "%02X", temp->payload[i]);
+          str += buff;
+          // Serial.print(temp->payload[i]);          
+        }
+        // Serial.println();
+        Serial.println(str.c_str());
+        char str_cstr[201]; // Reserve space for the null terminator
+        str.toCharArray(str_cstr, sizeof(str_cstr));
+        sprintf(link_json, "{\"A\":\"%X\",\"R\":\"%.2f\",\"T\":\"%016llX\",\"Payload\":\"%s\"}", temp->anchor_addr, temp->range[0], temp->tag_addr, str_cstr);
         *s += link_json;
         if (temp->next != NULL)
         {

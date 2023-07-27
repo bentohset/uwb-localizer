@@ -4,12 +4,13 @@ struct MyLink
 {
     uint8_t anchor_addr;
     uint64_t tag_addr;
+    uint8_t payload[100] = {};
     double range[3];
     struct MyLink *next;
 };
 
 struct MyLink *init_link();
-void add_link(struct MyLink *p, uint8_t addr, uint64_t tagaddr);
+void add_link(struct MyLink *p, uint8_t addr, uint64_t tagaddr, uint8_t* payload);
 struct MyLink *find_link(struct MyLink *p, uint64_t tagaddr);
 void fresh_link(struct MyLink *p, uint64_t tagaddr, double range);
 void print_link(struct MyLink *p);
